@@ -79,8 +79,9 @@ class TravelAPIAdapter(BaseAdapter):
                 try:
                     origin = (seg.get("from") or "").upper()
                     dest = (seg.get("to") or "").upper()
-                    if origin not in AIRPORTS or dest not in AIRPORTS:
-                        result.errors.append({"row_ref": row_ref, "message": f"Unknown airport code(s): {origin}, {dest}"})
+                    unknown = [c for c in (origin, dest) if c not in AIRPORTS]
+                    if unknown:
+                        result.errors.append({"row_ref": row_ref, "message": f"Unknown airport code(s): {', '.join(unknown)}"})
                         continue
                     distance = great_circle_km(AIRPORTS[origin], AIRPORTS[dest])
                     cabin = seg.get("cabin", "economy")

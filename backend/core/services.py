@@ -67,7 +67,12 @@ def resolve_facility(tenant: Tenant, source_kind: str, source_code: str | None) 
     }.get(source_kind)
     if not field_key:
         return None
-    return Facility.objects.filter(tenant=tenant, source_codes__contains={field_key: source_code}).first()
+    # JSONField __contains is Postgres-only. Tenants have few facilities, so
+    # iterate in Python — works on SQLite (local dev) and Postgres alike.
+    for f in Facility.objects.filter(tenant=tenant):
+        if f.source_codes.get(field_key) == source_code:
+            return f
+    return None
 
 
 def resolve_factor(category: EmissionCategory, unit: str, region: str, on_date: date) -> EmissionFactor | None:
