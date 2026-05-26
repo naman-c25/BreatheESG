@@ -1,0 +1,12 @@
+Buchungsdatum|Werk|Material|Materialkurztext|Menge|Basismengeneinheit|Bewegungsart
+03.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.247,500|LTR|261
+07.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|982,750|LTR|261
+12.04.2025|DE01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.502,000|LTR|261
+14.04.2025|US01|FUEL-PET-002|Benzin ROZ 95|410,250|LTR|261
+18.04.2025|US01|FUEL-NG-100|Erdgas Industriebezug|24.500,000|M3|261
+22.04.2025|DE01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.198,000|LTR|261
+24.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.301,000|LTR|261
+25.04.2025|US01|PROC-STL-A36|Stahl A36 Walzprofil|18.200,000|KG|101
+28.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|45.000,000|LTR|261
+29.04.2025|XX99|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|750,000|LTR|261
+30.04.2025|US01|MISC-WIDGET|Diverse Kleinteile|12,000|STK|261
