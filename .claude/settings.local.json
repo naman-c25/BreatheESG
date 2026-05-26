@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -c \"import django; print\\(django.__version__\\)\")",
-      "Bash(chmod +x f:/BreatheESG/build.sh)"
-    ]
-  }
-}
