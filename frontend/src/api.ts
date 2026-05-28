@@ -27,7 +27,15 @@ export const api = {
   login: (email: string, password: string) =>
     req("/api/auth/login/", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => req("/api/auth/logout/", { method: "POST" }),
-  me: () => req("/api/auth/me/"),
+  // me() ek special case hai — 401 = "logged out", error nahi. Null return
+  // karte hain taaki App.tsx login page dikha sake. React Query 401 pe retry
+  // bhi nahi karega, kyunki throw nahi ho raha.
+  me: async () => {
+    const res = await fetch(`${BASE}/api/auth/me/`, { credentials: "include" });
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    return res.json();
+  },
 
   // data
   sources: () => req("/api/sources/"),

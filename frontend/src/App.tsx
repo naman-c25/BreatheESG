@@ -15,7 +15,7 @@ export default function App() {
   const [theme, toggleTheme] = useTheme();
   const qc = useQueryClient();
 
-  const { data: me, isLoading, refetch } = useQuery<Me>({
+  const { data: me, isLoading, refetch } = useQuery<Me | null>({
     queryKey: ["me"],
     queryFn: api.me,
     retry: false,
