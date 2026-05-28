@@ -19,9 +19,9 @@ async function req(path: string, init: RequestInit = {}) {
     credentials: "include",
   });
   if (res.status === 401 && !path.startsWith("/api/auth/")) {
-    // Session expired ya invalid ho gaya. App ko notify karo — woh login
-    // page render kar dega. Throw kar dete hain taaki caller mutation
-    // ka error handler bhi fire ho.
+    // Session expired ya invalid ho gaya. Flag clear karo (warna agle page
+    // load pe me() phir se 401 dega), app ko notify karo, phir throw.
+    localStorage.removeItem("esg_authed");
     onAuthLost?.();
     throw new Error("Session expired — please sign in again");
   }
@@ -37,15 +37,27 @@ async function req(path: string, init: RequestInit = {}) {
 
 export const api = {
   // auth
-  login: (email: string, password: string) =>
-    req("/api/auth/login/", { method: "POST", body: JSON.stringify({ email, password }) }),
-  logout: () => req("/api/auth/logout/", { method: "POST" }),
-  // me() ek special case hai — 401 = "logged out", error nahi. Null return
-  // karte hain taaki App.tsx login page dikha sake. React Query 401 pe retry
-  // bhi nahi karega, kyunki throw nahi ho raha.
+  login: async (email: string, password: string) => {
+    const me = await req("/api/auth/login/", { method: "POST", body: JSON.stringify({ email, password }) });
+    localStorage.setItem("esg_authed", "1");  // hint flag, see me() below
+    return me;
+  },
+  logout: async () => {
+    try { await req("/api/auth/logout/", { method: "POST" }); }
+    finally { localStorage.removeItem("esg_authed"); }
+  },
+  // me() — agar localStorage flag set nahi hai matlab user kabhi login hi
+  // nahi hua. Server ko poochne ka point hi nahi — direct null return karo
+  // taaki browser ka 401 console error bhi na aaye. Cookie HttpOnly hai isliye
+  // JS read nahi kar sakta, par yeh flag ek safe hint hai ("login attempt
+  // karna worth it hai ya nahi"). Actual auth still server-side cookie.
   me: async () => {
+    if (localStorage.getItem("esg_authed") !== "1") return null;
     const res = await fetch(`${BASE}/api/auth/me/`, { credentials: "include" });
-    if (res.status === 401) return null;
+    if (res.status === 401) {
+      localStorage.removeItem("esg_authed");
+      return null;
+    }
     if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
     return res.json();
   },
