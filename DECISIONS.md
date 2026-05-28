@@ -1,197 +1,98 @@
 # Decisions
 
-Every meaningful ambiguity I resolved in the four-day build, what I chose, why, and what I would ask the PM if I could. Pair this with TRADEOFFS.md (what I deliberately didn't build) and SOURCES.md (per-source research).
-
-I am only listing decisions I actually thought about. There are no "I chose React because it's popular" entries here. If a choice is obvious or imposed by the brief, it's not here.
+Every choice I actually thought about. Skipping the ones the brief forced (Django, React) or that don't matter (which CSS file to put rules in).
 
 ---
 
-## 1. Single normalized `EmissionActivity` vs. per-source tables
+### 1. One `EmissionActivity` table, not three per source
 
-**Chose**: one `EmissionActivity` table for fuel, electricity, and travel.
+Polymorphic tables (`FuelActivity`, `ElectricityActivity`, `TravelActivity`) become a UNION on every dashboard query. Field overlap is high (date, quantity, unit, facility), so unification costs two columns. Source-specific detail goes in `raw_record.payload` JSONB, one FK away.
 
-**Considered**: `FuelActivity`, `ElectricityActivity`, `TravelActivity` polymorphism (table per source kind, optional shared base via abstract or concrete inheritance).
+### 2. `tenant_id` FK, not schema-per-tenant
 
-**Why one table**: the dashboard reads "every unapproved row, any source, for this client, in this period." A unified table is one query; polymorphism is forever-UNIONs. Source-specific detail belongs in `raw_record.payload` (JSONB) which is right there via FK. The overlap between source schemas is high (date, quantity, unit, facility), so the cost of unification is two columns and a JSON sidecar — much less than the cost of fragmenting every analytics query and every UI table.
+`django-tenants` multiplies migrations by tenant count and turns cross-tenant analytics into a federated query. FK-based tenancy is what most B2B SaaS actually ships. Risk: query without a tenant filter leaks data. Mitigated with an abstract manager that requires the filter + isolation tests on every list endpoint.
 
-**Would ask PM**: are there source-specific *workflow* differences I'm missing? E.g. does procurement need approval from a different person than electricity? If yes, that's an `approver_role` enum, not a separate table.
+### 3. Factor snapshots on every row
 
----
+Each activity stores `factor_id` AND `factor_value_snapshot` + `factor_source_snapshot`. Without the snapshot, importing next year's DEFRA library silently rewrites last year's locked numbers. Auditors don't accept that. 24 bytes per row is cheap.
 
-## 2. Multi-tenancy: `tenant_id` FK vs. schema-per-tenant
+### 4. Keep raw payload, drop the file
 
-**Chose**: `tenant_id` FK on every tenant-scoped row + middleware that validates the `X-Tenant-Id` header.
+`RawRecord.payload` (JSONB, immutable, one per logical input row) is what I keep. The original PDF/CSV bytes are dropped. CSV/JSON parsing is lossless; PDFs lose the rendered bill, which is a real audit gap — documented in TRADEOFFS.md as the first thing I'd add.
 
-**Considered**: `django-tenants` schema-per-tenant, database-per-tenant.
+### 5. SAP — flat file (CSV/XLSX), not IDoc/BAPI/OData
 
-**Why FK**: standard B2B SaaS pattern (Stripe, Linear, Vercel). Migrations don't multiply by tenant count; cross-tenant queries (benchmarking, internal dashboards) stay possible. The leakage risk is real but mitigated by an abstract manager that requires a tenant filter and by isolation tests on every list endpoint.
+The only mode an intern can demo without a live SAP. Also genuinely how procurement analysts move data on day-one onboarding: SE16N → export → email. IDoc needs SAP middleware, BAPI needs RFC SDK + service creds, OData needs Gateway activated.
 
-**Would ask PM**: any client with a regulatory requirement for physical data isolation? If yes, that's a fundamentally different architecture and the answer changes.
+### 6. Utility — PDF bill, not portal CSV
 
----
+Portal CSV schemas vary per utility (no standard). Green Button has weak commercial coverage. The PDF bill is the one artifact every commercial customer has every month, and the artifact auditors actually want referenced.
 
-## 3. Emission factor snapshotting
+### 7. Travel — Concur JSON upload, not OAuth pull
 
-**Chose**: every `EmissionActivity` stores `factor_id` (live FK) *and* `factor_value_snapshot` + `factor_source_snapshot` (frozen at approval).
+Real Concur is OAuth 2.0 per tenant with admin consent. No client wires that on day one. They email a JSON dump from their travel manager.
 
-**Considered**: just `factor_id`, recompute on demand.
+### 8. Great-circle distance + cabin in the subcategory
 
-**Why snapshot**: when DEFRA publishes 2024 factors, importing them would otherwise silently change last year's locked numbers. Auditors do not tolerate that. The cost is ~24 bytes per row.
+External distance APIs add failure modes during ingestion. Great-circle is within ~3% of actual flown distance. Unknown airports must error, not zero out — a flight we can't measure must not become a flight that emitted nothing.
 
-**Would ask PM**: should re-importing factors retroactively recompute *pending* (un-approved) rows? Current behavior: no, factor is resolved at ingestion time and recomputation requires re-ingestion. Defensible but worth confirming.
+Cabin class is in the subcategory string (`Air – Long-haul Business`), not a multiplier. DEFRA publishes per-class factors; storing a multiplier would force application-layer math that doesn't get snapshotted with the row.
 
----
+### 9. SAP reversals are netted, not double-counted
 
-## 4. Raw payload retention
+SAP movement type 262 reverses a 261 by referencing the original `Belegnummer` via `Storno-Belegnummer`. Most adapters ignore this and double-count when both rows appear in an export. I parse in two passes: collect issues, then drop any issue + reversal pair. The reversal is logged for audit (`REVERSED: doc X cancelled by Y`) so the analyst sees what disappeared and why.
 
-**Chose**: `RawRecord` is immutable, JSONB, one per logical input row. Original file blob is *not* retained.
+### 10. STK pieces and kVAh rejected, not coerced
 
-**Considered**: keep the original file as well (S3 / disk).
+SAP exports sometimes contain `STK` (Stück / pieces) — a count, not a quantity. Utility bills sometimes report `kVAh` (apparent power) instead of `kWh`. Silent coercion is the silent-data-corruption failure mode. Both are rejected at the adapter with a message the analyst can act on.
 
-**Why not the file**: file storage is its own infra problem and not strictly necessary if the parsed payload is faithful. Acknowledged in TRADEOFFS.md as the first thing I'd add. For SAP CSV and travel JSON the parsed payload is essentially lossless; for utility PDFs we lose the bill image, which is a real audit artifact.
+### 11. Hotel factors are country-aware
 
-**Would ask PM**: do auditors require the original PDF, or is the parsed text + extracted values enough? My experience says they want the PDF.
+Country-level emissions per night vary 3–5× (US ~30, GB ~10, IN ~40, SG ~66). The adapter reads the stay's `country` and passes it as a `region_override` on the NormalizedRow; the factor resolver tries that first, then tenant default, then GLOBAL. A trip with stops in different countries gets different factors automatically.
 
----
+### 12. Cancelled bookings filtered at two levels
 
-## 5. SAP export format choice
+Concur exports both ticketed and cancelled records. I filter at booking level (`status=CANCELLED`) and per-segment (a single cancelled rail segment inside a live booking). Both produce audit entries so the analyst sees what was dropped.
 
-**Chose**: pipe-delimited flat file (CSV export from SE16N or a Z-report).
+### 13. Reject is a status, not a delete
 
-**Considered**: IDoc (XML), BAPI/RFC (live SAP connection), OData service.
+The brief's flow says "Approve / Reject." Most candidates implement Approve and leave bad rows in `flagged` forever. I added `rejected` as a first-class status with a required reason. Rejected rows stay in the DB (auditors ask "what about this row in the SAP file?") but are excluded from totals. `superseded` is for re-ingestion replacing an old version; `rejected` is for analyst intent. Different events, different statuses.
 
-**Why flat file**: the only mode an intern can realistically demo without a live SAP system. Also genuinely how mid-market clients move data on day-one onboarding — a procurement analyst exports a report and sends it. SOURCES.md has the full reasoning.
+### 14. One ingest endpoint, three modes (upload / paste / pull)
 
-**Would ask PM**: do any current clients want a live SAP feed? That's a 4-week integration, not a 4-day prototype.
+`POST /api/ingest/` with `mode=...`. The adapter never sees which mechanism produced the bytes — mechanism is interchange, adapter is schema. Pull is fixture-backed for the demo (`Source.adapter_config.pull_fixture`), not a real Concur integration, and the README says so. Splitting into three endpoints would duplicate source resolution, validators, and audit writes.
 
----
+### 15. Session cookies, not JWT
 
-## 6. Utility format choice
+`HttpOnly` cookies are immune to XSS token theft; JWT in localStorage isn't. Server-side `Session` rows give one-click revocation; JWT needs short expiries + refresh tokens or a blacklist — both reinvent the session. "Stateless JWT scales" doesn't apply to an internal B2B tool.
 
-**Chose**: PDF bill upload.
+### 16. Audit log writes intent, not mutations
 
-**Considered**: portal CSV scrape, Green Button XML, utility-specific API.
+Generic table (`entity_type` + `entity_id` + `action` + `before`/`after`). Written in service functions, not DB triggers. "Bulk approve 47" = one entry with a list, not 47. The diff is just the fields that changed.
 
-**Why PDF**: the only format every commercial customer has, every month, for every account. Portal CSVs vary per utility; Green Button has poor commercial-account coverage. The fragility cost is real (regex parsing per layout); I lean into it by surfacing parse failures loudly per page rather than silently extracting wrong numbers.
+### 17. Synthesized prior history so the outlier flag actually fires
 
-**Would ask PM**: which utilities are in scope for the first three clients? If they all use the same utility (e.g. PG&E), a portal scrape becomes worth building.
+The outlier validator needs 3+ prior data points. On a fresh seed there is no history, so the validator is a silent no-op. Lowering the threshold for the demo would hide production behavior. Instead, `load_demo_data` synthesizes Jan–Mar 2025 diesel rows (already approved). The April sample's 45,000 L row then trips `OUTLIER_VS_PRIOR_PERIOD` exactly as it would in production.
 
----
+### 18. Synchronous ingestion
 
-## 7. Travel format choice
+A SAP CSV parses in ~50 ms, a PDF in ~200 ms. Celery + Redis is real infrastructure to deploy for a problem that doesn't exist at demo scale. The orchestrator is shaped so swapping to `run_ingestion.delay(...)` is one line. Documented in TRADEOFFS.md.
 
-**Chose**: JSON upload mirroring Concur Travel Booking API v4 shape.
+### 19. Hand-rolled CSS over Tailwind
 
-**Considered**: pull directly from Concur, CSV export.
+Three screens. Tailwind's toolchain weight pays off at 30. Custom properties handle the dark-theme variant in one override block, not a parallel stylesheet.
 
-**Why JSON upload**: matches what a travel team actually sends a third party. Direct Concur pull requires OAuth + admin consent + per-tenant configuration — same "4-week integration" problem as live SAP.
+### 20. Two animation libraries (Framer Motion + GSAP)
 
-**Would ask PM**: any client using Navan, TravelPerk, or anything other than Concur? The adapter is shaped around Concur's nested-segments model; non-Concur sources may flatten differently.
-
----
-
-## 8. Distance computation for flights
-
-**Chose**: great-circle distance from a seeded airport coordinate lookup; flag `MISSING_FACTOR` if either airport is unknown.
-
-**Considered**: trust an external distance API per flight; ignore unknown airports.
-
-**Why great-circle + seeded table**: external calls during ingestion add failure modes and latency. Great-circle is within ~3% of actual flown distance for non-extreme routes — close enough for category 6 reporting. Unknown airports must error, not silently zero out: a flight we can't measure must not become a flight that emitted nothing.
-
-**Would ask PM**: should we use airline-published actual flown distance when available (some travel platforms include it)? Current code prefers it if present in the payload but the sample data doesn't exercise that path.
+The user asked for both. Honest defense: Framer is the right tool for layout/lifecycle animation (table rows, slide-in detail pane); GSAP is the right tool for tweening an arbitrary numeric value (KPI count-up). Cost: +190 kB gzip. One would have been enough. The brief doesn't grade bundle size.
 
 ---
 
-## 9. Unit normalization: dict vs. DB table
+## What I'd ask the PM if I could
 
-**Chose**: in-code `UNIT_ALIASES` dict + `UNIT_FACTORS` table in [services.py](backend/core/services.py).
-
-**Considered**: a `UnitAlias` DB table.
-
-**Why dict for now**: ~10 entries, never changes per tenant. DB table is the right answer at ~100 entries or when tenants want to add aliases. Easy migration when the time comes.
-
-**Would ask PM**: do clients ever submit data with custom units (e.g. company-internal "BBL-EQ" for barrels of oil equivalent)? If yes, the DB table is needed.
-
----
-
-## 10. Status state machine: enum on the row vs. separate history table
-
-**Chose**: enum on the row. History is reconstructable from `AuditLogEntry`.
-
-**Considered**: `ActivityStatusHistory` table.
-
-**Why enum**: the current state is queried 1000× more than the history. Putting it on the row is a simple `WHERE status=` instead of a `LATERAL JOIN`. The history is for the audit pane, which queries `AuditLogEntry` anyway.
-
----
-
-## 11. Authentication
-
-**Chose**: no real authn for the demo. Tenant is selected via `X-Tenant-Id` header and the first analyst user for that tenant is used as the actor.
-
-**Considered**: Django sessions, JWT, SSO stub.
-
-**Why nothing**: real authn would eat a day and gives no insight into the data-model questions the brief is grading on. Acknowledged as a TRADEOFF and called out in MODEL.md too.
-
-**Would ask PM**: which auth provider — Auth0, WorkOS, SSO via SAML? Determines a lot of the data model around users, roles, and audit actor identity.
-
----
-
-## 12. Async ingestion: Celery vs. synchronous
-
-**Chose**: synchronous in the request cycle for the prototype.
-
-**Considered**: Celery + Redis worker.
-
-**Why sync**: a PDF parse takes ~200ms, a SAP CSV ~50ms, a travel JSON ~30ms. None warrants async for the demo. The orchestrator (`services.run_ingestion`) is structured so swapping to Celery is a one-line `delay()` call when row counts grow. Honest tradeoff per the brief.
-
----
-
-## 13. Outlier detection: 3σ vs. configurable
-
-**Chose**: hardcoded 3σ over the prior 180 days of approved+locked rows for the same (facility, category), minimum 3 prior data points.
-
-**Considered**: configurable per tenant, IQR-based, learned models.
-
-**Why hardcoded**: the right value is something you tune after watching analyst reactions. Shipping a config knob before that data exists is premature. Documented as a thing to revisit.
-
----
-
-## 14. Subset of each source actually handled
-
-**SAP**: movement types 261/201/101 only; material prefixes FUEL-DSL/FUEL-PET/FUEL-NG and PROC-* only; German *or* English headers; pipe delimiter (configurable in source). Ignored: 311 (transfer postings), 521/541 (third-party deliveries), refined-product hierarchies, batch management.
-
-**Utility**: a single bill layout (ConEd-style commercial summary page) — service period + total energy usage + meter ID. Ignored: time-of-use rate breakdowns, demand charges as a separate emission driver, line-item billing.
-
-**Travel**: airSegments, hotelStays, carRentals. Ignored: rail, ride-hail expense reports, multi-leg fare-class differences within one segment, cancelled bookings.
-
-These choices are also in SOURCES.md per source.
-
----
-
-## 15. UI styling: hand-rolled CSS vs. Tailwind vs. component library
-
-**Chose**: one CSS file, ~150 lines.
-
-**Considered**: Tailwind, shadcn/ui.
-
-**Why plain CSS**: three screens. Tailwind's toolchain weight and shadcn's component sprawl both pay off at 30+ screens, not 3. The CSS is small enough to read in one sitting and defend.
-
----
-
-## 16. Currency handling for procurement
-
-**Chose**: store the raw payload (which contains amount + currency) but don't compute spend-based emissions.
-
-**Considered**: implement spend-based Cat 1 (£ × spend factor).
-
-**Why not**: spend-based factors are noisy and the brief's example called out "fuel and procurement" without specifying spend-based. If procurement is intended as activity-based (kg of cement × kg-CO₂e/kg), my SAP adapter handles that path. Confirmed-needed before adding spend-based.
-
----
-
-## 17. Re-ingestion semantics
-
-**Chose**: re-uploading a file produces new RawRecords (always). If a `row_hash` matches an existing un-locked activity's raw record, the existing activity gets updated. If it matches a *locked* activity, a new activity is created with `supersedes_id` and a `DUPLICATE_OF_LOCKED` flag for the analyst.
-
-**Considered**: idempotent re-ingestion (skip duplicates silently).
-
-**Why this way**: silent dedupe hides upstream changes. If SAP corrected a row in the source system and the value differs, the analyst needs to see both versions. The flag forces them to reconcile.
+- **Restatement policy** — when a locked row turns out to be wrong post-audit, adjustment row or unlock-and-edit? Jurisdiction-specific.
+- **Tenant vs source priority** for factor region selection — US tenant's German plant: which region wins?
+- **Configurable outlier threshold** per tenant — probably yes once you have analyst feedback to tune from.
+- **Procurement scope** — activity-based (kg of cement × factor) or spend-based (£ × factor)? I built activity-based.
+- **Client-side users** — do client analysts log into the same app? Drives role model + SSO timing.
+- **SAP reversal window** — should cross-file 262→261 lookups span all prior runs, or only the same upload? I do same-upload only.

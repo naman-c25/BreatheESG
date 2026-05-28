@@ -20,10 +20,18 @@ CATEGORIES = [
     (1, "Stationary Combustion", "Natural Gas", "kWh"),
     (1, "Mobile Combustion", "Petrol", "L"),
     (2, "Purchased Electricity", "Grid Mix", "kWh"),
-    (3, "Business Travel", "Air – Short-haul", "km"),
-    (3, "Business Travel", "Air – Long-haul", "km"),
+    # Air travel — one row per (haul, cabin) combination. DEFRA multipliers
+    # (vs economy): Premium ~1.6×, Business ~2.9×, First ~4.0× for long-haul.
+    (3, "Business Travel", "Air – Short-haul Economy", "km"),
+    (3, "Business Travel", "Air – Short-haul Premium Economy", "km"),
+    (3, "Business Travel", "Air – Short-haul Business", "km"),
+    (3, "Business Travel", "Air – Long-haul Economy", "km"),
+    (3, "Business Travel", "Air – Long-haul Premium Economy", "km"),
+    (3, "Business Travel", "Air – Long-haul Business", "km"),
+    (3, "Business Travel", "Air – Long-haul First", "km"),
     (3, "Business Travel", "Hotel", "nights"),
     (3, "Business Travel", "Ground – Car", "km"),
+    (3, "Business Travel", "Ground – Rail", "km"),
     (3, "Purchased Goods and Services", "Procurement", "kg"),
 ]
 
@@ -37,10 +45,25 @@ FACTORS = [
     (2, "Purchased Electricity", "Grid Mix", "US", "kWh", "0.38554", "EPA eGRID 2022"),
     (2, "Purchased Electricity", "Grid Mix", "DE", "kWh", "0.43800", "Umweltbundesamt 2023"),
     (2, "Purchased Electricity", "Grid Mix", "GLOBAL", "kWh", "0.47500", "IEA 2022"),
-    (3, "Business Travel", "Air – Short-haul", "GLOBAL", "km", "0.15102", "DEFRA 2023"),
-    (3, "Business Travel", "Air – Long-haul", "GLOBAL", "km", "0.14787", "DEFRA 2023"),
-    (3, "Business Travel", "Hotel", "GLOBAL", "nights", "10.40000", "Cornell Hotel Index 2022"),
+    # Air — DEFRA 2023 with cabin-class multipliers. Numbers below are DEFRA's
+    # actual published values, not derived multipliers.
+    (3, "Business Travel", "Air – Short-haul Economy", "GLOBAL", "km", "0.15102", "DEFRA 2023"),
+    (3, "Business Travel", "Air – Short-haul Premium Economy", "GLOBAL", "km", "0.22653", "DEFRA 2023"),
+    (3, "Business Travel", "Air – Short-haul Business", "GLOBAL", "km", "0.22653", "DEFRA 2023"),
+    (3, "Business Travel", "Air – Long-haul Economy", "GLOBAL", "km", "0.14787", "DEFRA 2023"),
+    (3, "Business Travel", "Air – Long-haul Premium Economy", "GLOBAL", "km", "0.23659", "DEFRA 2023"),
+    (3, "Business Travel", "Air – Long-haul Business", "GLOBAL", "km", "0.42884", "DEFRA 2023"),
+    (3, "Business Travel", "Air – Long-haul First", "GLOBAL", "km", "0.59151", "DEFRA 2023"),
+    # Hotels — country-specific. Cornell Hotel Sustainability Benchmarking 2023.
+    (3, "Business Travel", "Hotel", "US", "nights", "30.05000", "Cornell HSB 2023"),
+    (3, "Business Travel", "Hotel", "GB", "nights", "10.40000", "Cornell HSB 2023"),
+    (3, "Business Travel", "Hotel", "DE", "nights", "20.32000", "Cornell HSB 2023"),
+    (3, "Business Travel", "Hotel", "IN", "nights", "40.50000", "Cornell HSB 2023"),
+    (3, "Business Travel", "Hotel", "SG", "nights", "65.83000", "Cornell HSB 2023"),
+    (3, "Business Travel", "Hotel", "GLOBAL", "nights", "20.10000", "Cornell HSB 2023"),
+    # Ground
     (3, "Business Travel", "Ground – Car", "GLOBAL", "km", "0.17012", "DEFRA 2023"),
+    (3, "Business Travel", "Ground – Rail", "GLOBAL", "km", "0.03548", "DEFRA 2023"),
 ]
 
 
@@ -54,16 +77,26 @@ class Command(BaseCommand):
         )
         self.stdout.write(self.style.SUCCESS(f"Tenant: {tenant.id} {tenant.name}"))
 
-        User.objects.get_or_create(
+        u, _ = User.objects.get_or_create(
             tenant=tenant, email="analyst@acme.example",
             defaults={"display_name": "Sam Analyst"},
         )
+        if not u.password_hash:
+            u.set_password("demo1234")
+            u.save()
 
-        # Optional: a second tenant proves multi-tenancy works
-        Tenant.objects.get_or_create(
+        # A second tenant proves multi-tenancy. Login as analyst@globex.example / demo1234.
+        globex, _ = Tenant.objects.get_or_create(
             name="Globex DE GmbH",
             defaults={"default_region": "DE", "default_currency": "EUR"},
         )
+        gu, _ = User.objects.get_or_create(
+            tenant=globex, email="analyst@globex.example",
+            defaults={"display_name": "Lena Analyst"},
+        )
+        if not gu.password_hash:
+            gu.set_password("demo1234")
+            gu.save()
 
         for scope, cat, sub, unit in CATEGORIES:
             EmissionCategory.objects.get_or_create(
@@ -107,6 +140,12 @@ class Command(BaseCommand):
         )
         Source.objects.get_or_create(
             tenant=tenant, name="Concur — Business Travel",
-            defaults={"kind": "travel_api", "adapter_config": {}},
+            defaults={
+                "kind": "travel_api",
+                # pull_fixture wires the demo's "Pull from API" button to a
+                # bundled sample file. In production this is replaced by a
+                # real Concur OAuth client (out of scope per SOURCES.md).
+                "adapter_config": {"pull_fixture": "travel_concur_2025_04.json"},
+            },
         )
         self.stdout.write(self.style.SUCCESS("Seed complete."))

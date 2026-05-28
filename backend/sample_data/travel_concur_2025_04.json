@@ -4,24 +4,29 @@
   "bookings": [
     {
       "id": "BK-2025-04-0001",
+      "status": "TICKETED",
       "traveler": {"email": "j.doe@acme.example", "employeeId": "E1042"},
       "airSegments": [
         {"from": "JFK", "to": "LHR", "cabin": "economy", "departureDate": "2025-04-08T19:30:00Z", "ticketNumber": "0012345678901"},
         {"from": "LHR", "to": "JFK", "cabin": "economy", "departureDate": "2025-04-15T11:05:00Z", "ticketNumber": "0012345678902"}
       ],
       "hotelStays": [
-        {"propertyName": "The Tower Hotel London", "checkIn": "2025-04-08T15:00:00Z", "checkOut": "2025-04-15T11:00:00Z", "nights": 7}
+        {"propertyName": "The Tower Hotel London", "country": "GB", "checkIn": "2025-04-08T15:00:00Z", "checkOut": "2025-04-15T11:00:00Z", "nights": 7}
       ],
-      "carRentals": []
+      "carRentals": [],
+      "railSegments": [
+        {"from": "London Paddington", "to": "Heathrow T5", "distance": 23, "distanceUnit": "km", "departureDate": "2025-04-08T17:00:00Z"}
+      ]
     },
     {
       "id": "BK-2025-04-0002",
+      "status": "TICKETED",
       "traveler": {"email": "k.smith@acme.example", "employeeId": "E1077"},
       "airSegments": [
         {"from": "SFO", "to": "SIN", "cabin": "business", "departureDate": "2025-04-12T23:15:00Z", "ticketNumber": "0017788990011"}
       ],
       "hotelStays": [
-        {"propertyName": "Marina Bay Sands", "checkIn": "2025-04-13T16:00:00Z", "checkOut": "2025-04-17T10:00:00Z", "nights": 4}
+        {"propertyName": "Marina Bay Sands", "country": "SG", "checkIn": "2025-04-13T16:00:00Z", "checkOut": "2025-04-17T10:00:00Z", "nights": 4}
       ],
       "carRentals": [
         {"vendor": "Hertz", "pickupDate": "2025-04-13T17:00:00Z", "returnDate": "2025-04-17T08:00:00Z", "distance": 142, "distanceUnit": "km"}
@@ -29,15 +34,42 @@
     },
     {
       "id": "BK-2025-04-0003",
+      "status": "TICKETED",
       "traveler": {"email": "r.patel@acme.example", "employeeId": "E1101"},
       "airSegments": [
         {"from": "BOM", "to": "DEL", "cabin": "economy", "departureDate": "2025-04-21T07:00:00Z", "ticketNumber": "0019988776655"},
-        {"from": "DEL", "to": "FRA", "cabin": "economy", "departureDate": "2025-04-21T14:20:00Z", "ticketNumber": "0019988776656"},
+        {"from": "DEL", "to": "FRA", "cabin": "premium_economy", "departureDate": "2025-04-21T14:20:00Z", "ticketNumber": "0019988776656"},
         {"from": "FRA", "to": "ZZZ", "cabin": "economy", "departureDate": "2025-04-22T09:00:00Z", "ticketNumber": "0019988776657"}
       ],
-      "hotelStays": [],
+      "hotelStays": [
+        {"propertyName": "Park Hyatt Delhi", "country": "IN", "checkIn": "2025-04-21T15:00:00Z", "checkOut": "2025-04-21T22:00:00Z", "nights": 1}
+      ],
       "carRentals": [
         {"vendor": "Sixt", "pickupDate": "2025-04-22T11:00:00Z", "returnDate": "2025-04-25T10:00:00Z", "distance": 215, "distanceUnit": "mi"}
+      ]
+    },
+    {
+      "id": "BK-2025-04-0004",
+      "status": "CANCELLED",
+      "traveler": {"email": "j.doe@acme.example", "employeeId": "E1042"},
+      "airSegments": [
+        {"from": "JFK", "to": "LHR", "cabin": "business", "departureDate": "2025-04-28T19:30:00Z", "ticketNumber": "0099887766554"}
+      ],
+      "hotelStays": [
+        {"propertyName": "The Savoy London", "country": "GB", "checkIn": "2025-04-28T15:00:00Z", "checkOut": "2025-05-02T11:00:00Z", "nights": 4}
+      ],
+      "carRentals": []
+    },
+    {
+      "id": "BK-2025-04-0005",
+      "status": "TICKETED",
+      "traveler": {"email": "l.wagner@acme.example", "employeeId": "E1200"},
+      "airSegments": [],
+      "hotelStays": [],
+      "carRentals": [],
+      "railSegments": [
+        {"from": "Berlin Hbf", "to": "Frankfurt Hbf", "distance": 545, "distanceUnit": "km", "departureDate": "2025-04-24T08:00:00Z"},
+        {"from": "Frankfurt Hbf", "to": "Berlin Hbf", "distance": 545, "distanceUnit": "km", "departureDate": "2025-04-26T17:30:00Z", "status": "CANCELLED"}
       ]
     }
   ]

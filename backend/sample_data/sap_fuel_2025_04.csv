@@ -1,12 +1,13 @@
-Buchungsdatum|Werk|Material|Materialkurztext|Menge|Basismengeneinheit|Bewegungsart
-03.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.247,500|LTR|261
-07.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|982,750|LTR|261
-12.04.2025|DE01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.502,000|LTR|261
-14.04.2025|US01|FUEL-PET-002|Benzin ROZ 95|410,250|LTR|261
-18.04.2025|US01|FUEL-NG-100|Erdgas Industriebezug|24.500,000|M3|261
-22.04.2025|DE01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.198,000|LTR|261
-24.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.301,000|LTR|261
-25.04.2025|US01|PROC-STL-A36|Stahl A36 Walzprofil|18.200,000|KG|101
-28.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|45.000,000|LTR|261
-29.04.2025|XX99|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|750,000|LTR|261
-30.04.2025|US01|MISC-WIDGET|Diverse Kleinteile|12,000|STK|261
+Buchungsdatum|Werk|Material|Materialkurztext|Menge|Basismengeneinheit|Bewegungsart|Belegnummer|Storno-Belegnummer
+03.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.247,500|LTR|261|4900001001|
+07.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|982,750|LTR|261|4900001002|
+12.04.2025|DE01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.502,000|LTR|261|4900001003|
+14.04.2025|US01|FUEL-PET-002|Benzin ROZ 95|410,250|LTR|261|4900001004|
+18.04.2025|US01|FUEL-NG-100|Erdgas Industriebezug|24.500,000|M3|261|4900001005|
+20250422|DE01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.198,000|LTR|261|4900001006|
+24.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|1.301,000|LTR|261|4900001007|
+25.04.2025|US01|PROC-STL-A36|Stahl A36 Walzprofil|18.200,000|KG|101|4900001008|
+26.04.2025|US01|FUEL-DSL-001|Falsche Buchung Lieferschein 4900001002|982,750|LTR|262|4900001099|4900001002
+28.04.2025|US01|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|45.000,000|LTR|261|4900001009|
+29.04.2025|XX99|FUEL-DSL-001|Dieselkraftstoff Standardqualitaet|750,000|LTR|261|4900001010|
+30.04.2025|US01|MISC-WIDGET|Diverse Kleinteile|12,000|STK|261|4900001011|

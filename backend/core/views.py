@@ -56,19 +56,60 @@ class IngestionRunViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class IngestView(APIView):
-    """POST file upload to ingest data."""
+    """
+    Teen ingestion modes, ek endpoint:
+      1. mode=upload (default) — multipart file.
+      2. mode=paste            — content body + file_name (mostly travel JSON).
+      3. mode=pull             — configured fixture se padhta hai (demo ke liye —
+                                 prod mein real Concur/SAP API call yahan aayega).
+
+    Teeno run_ingestion(...) pe converge karte hain. Adapter ko pata bhi nahi
+    chalta ki bytes kahan se aaye — yahi point hai: mechanism interchange detail
+    hai, data model ka part nahi.
+    """
     def post(self, request):
         if err := _require_tenant(request): return err
         source_id = request.data.get("source")
         if not source_id:
             return response.Response({"detail": "source is required"}, status=400)
         source = get_object_or_404(Source, pk=source_id, tenant=request.tenant)
-        file = request.FILES.get("file")
-        if not file:
-            return response.Response({"detail": "file is required"}, status=400)
+        mode = request.data.get("mode", "upload")
+
+        if mode == "upload":
+            file = request.FILES.get("file")
+            if not file:
+                return response.Response({"detail": "file is required for mode=upload"}, status=400)
+            file_bytes, file_name = file.read(), file.name
+
+        elif mode == "paste":
+            content = request.data.get("content", "")
+            if not content:
+                return response.Response({"detail": "content is required for mode=paste"}, status=400)
+            file_bytes = content.encode("utf-8") if isinstance(content, str) else bytes(content)
+            file_name = request.data.get("file_name", "pasted-content")
+
+        elif mode == "pull":
+            from pathlib import Path
+            fixture = (source.adapter_config or {}).get("pull_fixture")
+            if not fixture:
+                return response.Response(
+                    {"detail": "This source is not configured for API pull. "
+                               "Set adapter_config.pull_fixture to a sample file path. "
+                               "In production, this endpoint would call the source's API directly."},
+                    status=400,
+                )
+            path = Path(__file__).resolve().parent.parent / "sample_data" / fixture
+            if not path.exists():
+                return response.Response({"detail": f"Pull fixture {fixture!r} not found"}, status=400)
+            file_bytes = path.read_bytes()
+            file_name = f"pull/{fixture}"
+
+        else:
+            return response.Response({"detail": f"Unknown mode: {mode!r}"}, status=400)
+
         run = services.run_ingestion(
             tenant=request.tenant, source=source,
-            file_bytes=file.read(), file_name=file.name,
+            file_bytes=file_bytes, file_name=file_name,
             actor=request.user_obj,
         )
         return response.Response(IngestionRunSerializer(run).data, status=201)
@@ -124,6 +165,15 @@ class ActivityViewSet(viewsets.ModelViewSet):
         a = self.get_object()
         try:
             services.lock_activity(a, request.user_obj, request.data.get("reason", ""))
+        except ValueError as e:
+            return response.Response({"detail": str(e)}, status=400)
+        return response.Response(ActivitySerializer(a).data)
+
+    @decorators.action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        a = self.get_object()
+        try:
+            services.reject_activity(a, request.user_obj, request.data.get("reason", ""))
         except ValueError as e:
             return response.Response({"detail": str(e)}, status=400)
         return response.Response(ActivitySerializer(a).data)

@@ -1,4 +1,6 @@
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import gsap from "gsap";
 import { api } from "../api";
 
 type Summary = {
@@ -21,16 +23,40 @@ export function Summary() {
       <Kpi label="Pending review" value={(c.pending || 0) + (c.flagged || 0)} />
       <Kpi label="Approved" value={c.approved || 0} />
       <Kpi label="Locked for audit" value={c.locked || 0} />
-      <Kpi label="Total tCO₂e (approved+locked)" value={tco2e.toFixed(2)} />
+      <Kpi label="Total tCO₂e (approved+locked)" value={tco2e} fractionDigits={2} />
     </div>
   );
 }
 
-function Kpi({ label, value }: { label: string; value: number | string }) {
+/**
+ * KPI with a GSAP-driven count-up. GSAP is used (not Framer) because the
+ * easing target is a number, not a CSS/transform property — GSAP's tween
+ * over arbitrary object properties is the right tool here.
+ */
+function Kpi({ label, value, fractionDigits = 0 }: { label: string; value: number; fractionDigits?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const prevRef = useRef(0);
+  useEffect(() => {
+    const obj = { v: prevRef.current };
+    const target = value;
+    gsap.to(obj, {
+      v: target,
+      duration: 0.6,
+      ease: "power2.out",
+      onUpdate: () => {
+        if (ref.current) {
+          ref.current.textContent = obj.v.toLocaleString(undefined, {
+            minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits,
+          });
+        }
+      },
+    });
+    prevRef.current = target;
+  }, [value, fractionDigits]);
   return (
     <div className="kpi">
       <div className="label">{label}</div>
-      <div className="value">{value}</div>
+      <div className="value" ref={ref}>0</div>
     </div>
   );
 }

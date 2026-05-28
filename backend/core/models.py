@@ -1,6 +1,6 @@
 """
-Core data model. Mirrors MODEL.md. Read that document first if anything
-here looks under-justified — the reasoning lives there, not in comments here.
+Core data model. MODEL.md mein full reasoning hai — yahan sirf code hai.
+Agar koi field ya design choice samajh nahi aaya, pehle wahan padho.
 """
 import uuid
 from django.db import models
@@ -25,14 +25,36 @@ class Tenant(models.Model):
 
 
 class User(models.Model):
-    """Single-role analyst. Hardcoded auth for the demo — see DECISIONS.md."""
+    """
+    Single-role analyst. Tenant-scoped: an email is unique within a tenant
+    but the same email can exist across tenants (treated as separate users).
+    Auth is session-cookie based — see DECISIONS.md §11.
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="users")
     email = models.EmailField()
     display_name = models.CharField(max_length=200)
+    password_hash = models.CharField(max_length=200, blank=True)
 
     class Meta:
         unique_together = [("tenant", "email")]
+
+    def set_password(self, raw: str) -> None:
+        from django.contrib.auth.hashers import make_password
+        self.password_hash = make_password(raw)
+
+    def check_password(self, raw: str) -> bool:
+        from django.contrib.auth.hashers import check_password
+        return check_password(raw, self.password_hash)
+
+
+class Session(models.Model):
+    """Server-side session token. Cookie sent to client; FK to User here."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sessions")
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
 
 
 class Facility(TenantScopedModel):
@@ -46,6 +68,8 @@ class Facility(TenantScopedModel):
         unique_together = [("tenant", "name")]
 
 
+# Categories table, enum nahi — auditor ko taxonomy version bhi traceable
+# chahiye, aur clients apni custom subcategories add karte rehte hain.
 class EmissionCategory(models.Model):
     SCOPE_CHOICES = [(1, "Scope 1"), (2, "Scope 2"), (3, "Scope 3")]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -115,7 +139,11 @@ class IngestionRun(TenantScopedModel):
 
 
 class RawRecord(TenantScopedModel):
-    """Immutable. What arrived, exactly. Re-ingest writes new rows, never updates."""
+    """
+    Jo aaya, waisa ka waisa. Immutable. Re-ingest hone par naye rows likhte
+    hain — purane ko kabhi update nahi karte. Audit ke liye non-negotiable:
+    'tuesday wale upload mein kya tha' ka jawab always milna chahiye.
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     ingestion_run = models.ForeignKey(IngestionRun, on_delete=models.CASCADE, related_name="raw_records")
     source_row_ref = models.CharField(max_length=200, help_text="Line number, record ID, etc — for analyst error messages")
@@ -129,6 +157,7 @@ class EmissionActivity(TenantScopedModel):
         ("pending", "Pending review"),
         ("flagged", "Flagged"),
         ("approved", "Approved"),
+        ("rejected", "Rejected by analyst"),
         ("locked", "Locked for audit"),
         ("superseded", "Superseded by re-ingestion"),
     ]
@@ -157,7 +186,10 @@ class EmissionActivity(TenantScopedModel):
     unit_normalized = models.CharField(max_length=20, blank=True)
     conversion_factor = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
 
-    # Factor snapshot — see MODEL.md §5
+    # Factor snapshot — yeh sabse important design choice hai.
+    # FK rakhte hain factor pe, but VALUE aur SOURCE bhi snapshot karte hain.
+    # DEFRA 2024 import karne par 2023 ke locked numbers silently nahi badle —
+    # warna audit mein khoob daat padegi.
     factor = models.ForeignKey(EmissionFactor, on_delete=models.SET_NULL, null=True, blank=True, related_name="activities")
     factor_value_snapshot = models.DecimalField(max_digits=18, decimal_places=8, null=True, blank=True)
     factor_source_snapshot = models.CharField(max_length=120, blank=True)
@@ -206,7 +238,11 @@ class ValidationFlag(TenantScopedModel):
 
 
 class AuditLogEntry(TenantScopedModel):
-    """Append-only at the application layer. See MODEL.md §8."""
+    """
+    Generic event log — entity_type + entity_id. App layer pe append-only
+    (DB trigger nahi use kiya kyunki bulk action = 1 entry chahiye, na ki N).
+    'Bulk approve 47' ek hi entry hai with id list, 47 separate entries nahi.
+    """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     entity_type = models.CharField(max_length=60)

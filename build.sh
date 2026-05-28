@@ -14,4 +14,5 @@ python manage.py collectstatic --noinput
 python manage.py migrate
 python manage.py seed
 python manage.py generate_sample_pdf
+python manage.py generate_sample_xlsx
 python manage.py load_demo_data

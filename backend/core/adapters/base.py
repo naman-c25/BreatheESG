@@ -27,6 +27,9 @@ class NormalizedRow:
     period_start: date | None = None
     period_end: date | None = None
     notes: str = ""
+    # Optional ISO-2 region used to override factor lookup. Hotels use this so
+    # a stay in the UK picks up the UK factor regardless of tenant region.
+    region_override: str | None = None
 
 
 @dataclass
@@ -38,5 +41,5 @@ class AdapterResult:
 class BaseAdapter:
     kind: str = ""
 
-    def parse(self, file_bytes: bytes, config: dict) -> AdapterResult:
+    def parse(self, file_bytes: bytes, config: dict, filename: str = "") -> AdapterResult:
         raise NotImplementedError

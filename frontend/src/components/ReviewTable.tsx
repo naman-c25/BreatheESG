@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "framer-motion";
 import { api, Activity, Source } from "../api";
 
 type Notify = (msg: string, kind?: "error") => void;
@@ -79,11 +80,7 @@ export function ReviewTable({
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
-        <input
-          placeholder="Search notes…"
-          value={q}
-          onChange={e => setQ(e.target.value)}
-        />
+        <input placeholder="Search notes…" value={q} onChange={e => setQ(e.target.value)} />
       </div>
 
       <div className="actions">
@@ -118,49 +115,53 @@ export function ReviewTable({
             </tr>
           </thead>
           <tbody>
-            {isLoading && (
-              <tr><td colSpan={11} className="empty">Loading…</td></tr>
-            )}
+            {isLoading && <tr><td colSpan={11} className="empty">Loading…</td></tr>}
             {!isLoading && data?.length === 0 && (
               <tr><td colSpan={11} className="empty">Nothing matches these filters.</td></tr>
             )}
-            {data?.map(a => (
-              <tr
-                key={a.id}
-                className={selectedId === a.id ? "selected" : ""}
-                onClick={() => onSelect(a.id)}
-              >
-                <td onClick={e => e.stopPropagation()}>
-                  <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)} />
-                </td>
-                <td><span className={`badge ${a.status}`}>{a.status}</span></td>
-                <td><span className={`badge scope-${a.scope}`}>S{a.scope}</span></td>
-                <td>{a.category_label}</td>
-                <td>{a.facility_name || <span className="muted">—</span>}</td>
-                <td>{a.source_name}</td>
-                <td>{a.activity_date}</td>
-                <td className="num">{fmt(a.quantity_original)}</td>
-                <td>
-                  {a.unit_normalized || <span className="muted">{a.unit_original}</span>}
-                  {a.unit_normalized && a.unit_original.toLowerCase() !== a.unit_normalized.toLowerCase() && (
-                    <span className="muted" style={{ fontSize: 10 }}> (was {a.unit_original})</span>
-                  )}
-                </td>
-                <td className="num">{a.emissions_kgco2e ? fmt(a.emissions_kgco2e) : <span className="muted">—</span>}</td>
-                <td>
-                  {a.flags.filter(f => !f.dismissed_at).map(f => (
-                    <span key={f.id} className={`flag-pill ${f.severity}`} title={f.message}>
-                      {f.code}
-                    </span>
-                  ))}
-                  {a.flags.filter(f => f.dismissed_at).map(f => (
-                    <span key={f.id} className="flag-pill dismissed" title={`Dismissed: ${f.message}`}>
-                      {f.code}
-                    </span>
-                  ))}
-                </td>
-              </tr>
-            ))}
+            <AnimatePresence initial={false}>
+              {data?.map((a, idx) => (
+                <motion.tr
+                  key={a.id}
+                  className={selectedId === a.id ? "selected" : ""}
+                  onClick={() => onSelect(a.id)}
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.18, delay: Math.min(idx, 12) * 0.012, ease: "easeOut" }}
+                >
+                  <td onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" checked={selected.has(a.id)} onChange={() => toggle(a.id)} />
+                  </td>
+                  <td><span className={`badge ${a.status}`}>{a.status}</span></td>
+                  <td><span className={`badge scope-${a.scope}`}>S{a.scope}</span></td>
+                  <td>{a.category_label}</td>
+                  <td>{a.facility_name || <span className="muted">—</span>}</td>
+                  <td>{a.source_name}</td>
+                  <td>{a.activity_date}</td>
+                  <td className="num">{fmt(a.quantity_original)}</td>
+                  <td>
+                    {a.unit_normalized || <span className="muted">{a.unit_original}</span>}
+                    {a.unit_normalized && a.unit_original.toLowerCase() !== a.unit_normalized.toLowerCase() && (
+                      <span className="muted" style={{ fontSize: 10 }}> (was {a.unit_original})</span>
+                    )}
+                  </td>
+                  <td className="num">{a.emissions_kgco2e ? fmt(a.emissions_kgco2e) : <span className="muted">—</span>}</td>
+                  <td>
+                    {a.flags.filter(f => !f.dismissed_at).map(f => (
+                      <span key={f.id} className={`flag-pill ${f.severity}`} title={f.message}>
+                        {f.code}
+                      </span>
+                    ))}
+                    {a.flags.filter(f => f.dismissed_at).map(f => (
+                      <span key={f.id} className="flag-pill dismissed" title={`Dismissed: ${f.message}`}>
+                        {f.code}
+                      </span>
+                    ))}
+                  </td>
+                </motion.tr>
+              ))}
+            </AnimatePresence>
           </tbody>
         </table>
       </div>

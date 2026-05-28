@@ -61,5 +61,16 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 100,
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_HEADERS = list(__import__("corsheaders.defaults", fromlist=["default_headers"]).default_headers) + ["x-tenant-id"]
+# Cookie auth requires explicit origin allowlist (can't combine with allow_all)
+# and credentials enabled. In dev we accept localhost; in prod the SPA is
+# served from the same origin as the API so CORS is a non-issue.
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+CORS_ALLOWED_ORIGIN_REGEXES = [r"^https://.*\.onrender\.com$"]
+SESSION_COOKIE_SAMESITE = "Lax"
+
+# We removed TenantListView (auth provides tenant), but the view itself still
+# exists for reference. The TenantViewSet from earlier is not registered.

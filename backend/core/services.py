@@ -1,10 +1,10 @@
 """
-Orchestration layer between adapters and the database.
+Orchestration layer — adapters aur DB ke beech mein.
 
-Lives outside the views so it can be invoked from a Celery task, a
-management command, or a test, identically. For the prototype, the API
-calls this synchronously. The brief asked for honest tradeoffs, not
-overdone infrastructure — see TRADEOFFS.md.
+Views ke bahar rakha hai taaki Celery task, management command, ya test
+sab same function call kar sake. Prototype mein synchronous chala rahe hain
+(file parsing 50-200ms hai, Celery overkill hai). Pattern aisa banaya hai
+ki swap karna hai to ek line: `run_ingestion.delay(...)`. TRADEOFFS.md dekho.
 """
 from decimal import Decimal
 from datetime import date, timedelta
@@ -23,9 +23,10 @@ from .adapters import REGISTRY
 from .adapters.base import NormalizedRow
 
 
-# Canonical units per category + the conversion table.
-# Kept tiny on purpose. UnitAlias as a DB table would be the next move;
-# for a prototype a Python dict is honest.
+# Unit aliases — abhi dict mein hai, ~10 entries.
+# DB table tab banao jab 100+ ho jaaye ya client custom units add karne lage
+# (e.g. company-internal "BBL-EQ" for barrels of oil equivalent).
+# Premature DB table = over-engineering.
 UNIT_ALIASES = {
     "L": "L", "LTR": "L", "LITRE": "L", "LITER": "L",
     "GAL": "L",  # gallons US → L
@@ -67,8 +68,9 @@ def resolve_facility(tenant: Tenant, source_kind: str, source_code: str | None) 
     }.get(source_kind)
     if not field_key:
         return None
-    # JSONField __contains is Postgres-only. Tenants have few facilities, so
-    # iterate in Python — works on SQLite (local dev) and Postgres alike.
+    # __contains lookup sirf Postgres pe kaam karta hai, SQLite nahi.
+    # Local dev SQLite use karta hai, prod Postgres — dono jagah chalna chahiye.
+    # Per tenant ~10-20 facilities hi hote hain, Python loop fine hai.
     for f in Facility.objects.filter(tenant=tenant):
         if f.source_codes.get(field_key) == source_code:
             return f
@@ -108,7 +110,7 @@ def run_ingestion(tenant: Tenant, source: Source, file_bytes: bytes, file_name: 
         file_name=file_name, status="running",
     )
 
-    parsed = adapter_cls().parse(file_bytes, source.adapter_config or {})
+    parsed = adapter_cls().parse(file_bytes, source.adapter_config or {}, filename=file_name)
     run.row_count_received = len(parsed.rows) + len(parsed.errors)
     run.error_log = parsed.errors
 
@@ -158,7 +160,7 @@ def _build_activity(tenant, source, run, raw, nrow: NormalizedRow) -> EmissionAc
 
     factor = None
     if canon_unit:
-        region = facility.region if facility else tenant.default_region
+        region = nrow.region_override or (facility.region if facility else tenant.default_region)
         factor = resolve_factor(category, canon_unit, region, nrow.activity_date)
 
     emissions = None
@@ -233,7 +235,10 @@ def _run_validators(activity: EmissionActivity, nrow: NormalizedRow):
         if activity.status != "flagged":
             activity.status = "flagged"
 
-    # Outlier check vs the prior 180 days for same (facility, category).
+    # Outlier check — last 180 days mein same facility+category ke approved rows.
+    # 3+ data points chahiye, 3σ se zyaada deviation = flag.
+    # Yeh real production threshold hai — demo ke liye loosen nahi kiya, instead
+    # load_demo_data synthetic Jan-Mar history daal deta hai taaki ye actually fire ho.
     if activity.facility and activity.quantity_normalized:
         window_end = activity.activity_date - timedelta(days=1)
         window_start = window_end - timedelta(days=180)
@@ -274,6 +279,29 @@ def approve_activity(activity: EmissionActivity, actor: User, reason: str = "") 
         tenant=activity.tenant, actor=actor, entity_type="EmissionActivity",
         entity_id=activity.id, action="approved",
         before=before, after={"status": "approved"}, reason=reason,
+    )
+    return activity
+
+
+def reject_activity(activity: EmissionActivity, actor: User, reason: str) -> EmissionActivity:
+    """
+    Reject = analyst ka "yeh row aage mat le jao" signal.
+    Delete nahi karte — auditor pooch sakta hai "yeh row jo SAP file mein
+    aayi thi, uska kya hua?" — jawab milna chahiye "rejected because X."
+    Un-approve se different: rejection intentional hai, reason mandatory hai,
+    audit log mein jaata hai. Totals mein count nahi hota.
+    """
+    if not reason.strip():
+        raise ValueError("A rejection reason is required.")
+    if activity.status == "locked":
+        raise ValueError("Locked rows cannot be rejected. Issue an adjustment instead.")
+    before = {"status": activity.status}
+    activity.status = "rejected"
+    activity.save()
+    AuditLogEntry.objects.create(
+        tenant=activity.tenant, actor=actor, entity_type="EmissionActivity",
+        entity_id=activity.id, action="rejected",
+        before=before, after={"status": "rejected"}, reason=reason,
     )
     return activity
 
