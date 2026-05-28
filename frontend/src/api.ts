@@ -1,3 +1,5 @@
+// Single API client. credentials: 'include' har request mein bhejna mandatory
+// hai warna session cookie nahi jaayegi. Same-origin pe dev/prod dono kaam karta hai.
 const BASE = (import.meta.env.VITE_API_BASE as string) || "";
 
 async function req(path: string, init: RequestInit = {}) {

@@ -29,9 +29,10 @@ export function Summary() {
 }
 
 /**
- * KPI with a GSAP-driven count-up. GSAP is used (not Framer) because the
- * easing target is a number, not a CSS/transform property — GSAP's tween
- * over arbitrary object properties is the right tool here.
+ * KPI card with count-up animation.
+ * GSAP use kiya hai (Framer Motion nahi) kyunki yahan ek arbitrary number ko
+ * tween karna hai — CSS property nahi. Framer mein yeh awkward hota hai.
+ * Har library ka apna use case hai, dono ek saath rakhne ki real wajah yahi.
  */
 function Kpi({ label, value, fractionDigits = 0 }: { label: string; value: number; fractionDigits?: number }) {
   const ref = useRef<HTMLDivElement>(null);

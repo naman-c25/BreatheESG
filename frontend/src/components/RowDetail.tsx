@@ -183,6 +183,9 @@ export function RowDetail({ id, onClose, notify }: { id: string; onClose: () => 
   );
 }
 
+// Audit entry render — sirf woh fields dikhao jo actually change huye.
+// Pura before/after dump karna noise hai, diff format mein dikhana audit
+// reviewer ke liye actually useful.
 function AuditRow({ entry }: { entry: AuditEntry }) {
   const allKeys = new Set([...Object.keys(entry.before), ...Object.keys(entry.after)]);
   const diffs = [...allKeys].filter(k => JSON.stringify(entry.before[k]) !== JSON.stringify(entry.after[k]));

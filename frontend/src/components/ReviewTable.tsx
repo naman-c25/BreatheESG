@@ -119,6 +119,8 @@ export function ReviewTable({
             {!isLoading && data?.length === 0 && (
               <tr><td colSpan={11} className="empty">Nothing matches these filters.</td></tr>
             )}
+            {/* Row enter animation — staggered by index, max 12 stagger
+                taaki bahut rows hone par poora table slow na lage. */}
             <AnimatePresence initial={false}>
               {data?.map((a, idx) => (
                 <motion.tr

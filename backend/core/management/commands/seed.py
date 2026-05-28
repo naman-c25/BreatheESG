@@ -14,14 +14,20 @@ from core.models import (
 )
 
 
+# GHG Protocol categories. Scope 1 = direct (apni fuel/vehicles),
+# Scope 2 = purchased electricity, Scope 3 = value chain (travel, procurement).
+# Hardcoded list nahi rakha — categories table mein dalta hun kyunki
+# auditor ko taxonomy versioning bhi chahiye hoti hai.
 CATEGORIES = [
     # (scope, category, subcategory, canonical_unit)
     (1, "Stationary Combustion", "Diesel", "L"),
     (1, "Stationary Combustion", "Natural Gas", "kWh"),
     (1, "Mobile Combustion", "Petrol", "L"),
     (2, "Purchased Electricity", "Grid Mix", "kWh"),
-    # Air travel — one row per (haul, cabin) combination. DEFRA multipliers
-    # (vs economy): Premium ~1.6×, Business ~2.9×, First ~4.0× for long-haul.
+    # Air travel — har (haul, cabin) combination ka apna factor.
+    # DEFRA published values, multipliers nahi (warna snapshot ka concept toot jaata).
+    # Business class economy se ~2.9x emit karti hai per km — ignore karna matlab
+    # premium-cabin emissions silently 3x underreport.
     (3, "Business Travel", "Air – Short-haul Economy", "km"),
     (3, "Business Travel", "Air – Short-haul Premium Economy", "km"),
     (3, "Business Travel", "Air – Short-haul Business", "km"),
@@ -54,7 +60,9 @@ FACTORS = [
     (3, "Business Travel", "Air – Long-haul Premium Economy", "GLOBAL", "km", "0.23659", "DEFRA 2023"),
     (3, "Business Travel", "Air – Long-haul Business", "GLOBAL", "km", "0.42884", "DEFRA 2023"),
     (3, "Business Travel", "Air – Long-haul First", "GLOBAL", "km", "0.59151", "DEFRA 2023"),
-    # Hotels — country-specific. Cornell Hotel Sustainability Benchmarking 2023.
+    # Hotels — country-specific factors. Cornell HSB 2023.
+    # GB hotel 10 kg/night, SG 66 kg/night — 6x variation!
+    # Trip mein agar 3 alag countries ke hotels hain to 3 alag factors lagne chahiye.
     (3, "Business Travel", "Hotel", "US", "nights", "30.05000", "Cornell HSB 2023"),
     (3, "Business Travel", "Hotel", "GB", "nights", "10.40000", "Cornell HSB 2023"),
     (3, "Business Travel", "Hotel", "DE", "nights", "20.32000", "Cornell HSB 2023"),

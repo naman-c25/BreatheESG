@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+// Theme hook — localStorage me save karta hai, default OS preference se lega.
+// Analyst log session lambi hoti hai, manual toggle dena helpful hai.
+
 export type Theme = "light" | "dark";
 const KEY = "esg-theme";
 

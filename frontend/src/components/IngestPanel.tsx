@@ -60,8 +60,9 @@ function SourceCard({ source, busy, onUpload, onPull, onPaste }: {
     utility_pdf: ".pdf",
     travel_api: ".json",
   }[source.kind] || "";
-  // Pull and paste are best-suited to travel_api (JSON-shaped data).
-  // SAP CSV and Utility PDF technically work for paste too but the UX is bad.
+  // Pull aur paste sirf travel ke liye dikhao — JSON-shaped data ke liye sense banta hai.
+  // SAP CSV ya Utility PDF ko paste karna technically possible hai but UX bekaar hai
+  // (multi-KB content textarea mein paste karna kisko karna hai).
   const showPull = source.kind === "travel_api";
   const showPaste = source.kind === "travel_api";
 
