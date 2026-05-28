@@ -2,6 +2,12 @@
 // hai warna session cookie nahi jaayegi. Same-origin pe dev/prod dono kaam karta hai.
 const BASE = (import.meta.env.VITE_API_BASE as string) || "";
 
+// Callback set by App.tsx — agar koi bhi request 401 deti hai, app ko bolte hain
+// "me query invalidate kar do" taaki user automatically login page pe redirect ho.
+// Bina iske session expire hone par UI stuck ho jaata tha "logged in but nothing loads."
+let onAuthLost: (() => void) | null = null;
+export function setAuthLostHandler(fn: () => void) { onAuthLost = fn; }
+
 async function req(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
   if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
@@ -10,8 +16,15 @@ async function req(path: string, init: RequestInit = {}) {
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers,
-    credentials: "include", // send session cookie
+    credentials: "include",
   });
+  if (res.status === 401 && !path.startsWith("/api/auth/")) {
+    // Session expired ya invalid ho gaya. App ko notify karo — woh login
+    // page render kar dega. Throw kar dete hain taaki caller mutation
+    // ka error handler bhi fire ho.
+    onAuthLost?.();
+    throw new Error("Session expired — please sign in again");
+  }
   if (!res.ok) {
     const text = await res.text();
     const err = new Error(`${res.status} ${text}`) as Error & { status?: number };

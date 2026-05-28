@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, Me } from "./api";
+import { api, Me, setAuthLostHandler } from "./api";
 import { IngestPanel } from "./components/IngestPanel";
 import { ReviewTable } from "./components/ReviewTable";
 import { RowDetail } from "./components/RowDetail";
@@ -28,6 +28,16 @@ export default function App() {
       return () => clearTimeout(t);
     }
   }, [toast]);
+
+  // Agar koi bhi API call 401 deti hai mid-session, sab kuch invalidate karke
+  // me query refetch karo — jisse user automatically login page pe redirect ho jaaye.
+  // Yeh stale-session ke "logged in but nothing loads" wale bug ko fix karta hai.
+  useEffect(() => {
+    setAuthLostHandler(() => {
+      qc.setQueryData(["me"], null);
+      qc.invalidateQueries({ queryKey: ["me"] });
+    });
+  }, [qc]);
 
   function notify(msg: string, kind?: "error") {
     setToast({ msg, kind });
